@@ -3,10 +3,12 @@ next_speaker判断逻辑 - 完全参考Gemini CLI的checkNextSpeaker
 AI自主判断下一步是继续执行还是等待用户输入
 """
 
+from ..utils.content_helper import get_parts, get_role, get_text
 from typing import Optional, Dict, Any
 from ..types.core_types import AbortSignal
 from .chat import DatabaseChat
 from .prompts import DatabasePromptManager
+from ..utils.debug_logger import log_info, DebugLogger
 
 
 # JSON Schema定义
@@ -45,7 +47,6 @@ async def check_next_speaker(
        - User输入：完成当前任务，等待新指令
     """
     # 调试
-    from ..utils.debug_logger import log_info
     log_info("NextSpeaker", f"🤔 CHECK_NEXT_SPEAKER called")
     
     # 1. 特殊情况优先处理（与Gemini CLI逻辑一致）
@@ -56,15 +57,15 @@ async def check_next_speaker(
     last_message = curated_history[-1]
     
     # 工具刚执行完，AI应该继续处理结果
-    if last_message.get('role') == 'function':
+    if get_role(last_message) == 'function':
         return {
             'next_speaker': 'model',
             'reasoning': 'Function response received, model should process the result'
         }
         
     # 空的model消息，应该继续完成响应
-    if (last_message.get('role') == 'model' and
-        not any(part.get('text', '').strip() for part in last_message.get('parts', []))):
+    if (get_role(last_message) == 'model' and
+        not any(get_text(part).strip() for part in get_parts(last_message))):
         return {
             'next_speaker': 'model',
             'reasoning': 'Empty model response, should continue'

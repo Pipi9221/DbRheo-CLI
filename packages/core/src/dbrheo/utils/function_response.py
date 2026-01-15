@@ -5,7 +5,20 @@
 
 from typing import Union, Dict, Any, List
 from ..types.core_types import PartListUnion, Part
-from ..utils.debug_logger import log_info
+
+# 安全的日志函数包装，避免导入问题
+try:
+    from ..utils.debug_logger import log_info as _log_info
+    def log_info(component: str, message: str):
+        """安全的日志包装函数"""
+        try:
+            _log_info(component, message)
+        except Exception:
+            pass  # 静默失败，不影响主流程
+except Exception:
+    # 如果导入失败，提供一个空实现
+    def log_info(component: str, message: str):
+        pass
 
 
 def _select_best_content_for_agent(tool_result, tool_name: str) -> str:
@@ -219,8 +232,8 @@ def convert_to_function_response(
             log_info("FunctionResponse", f"🔍 DEBUG: create_function_response_part返回: {repr(final_response)}")
             
             return final_response
-    else:
-        log_info("FunctionResponse", f"没有检测到ToolResult对象，进入其他处理分支")
+    
+    log_info("FunctionResponse", f"没有检测到ToolResult对象，进入其他处理分支")
     
     # 处理单元素列表的情况
     content_to_process = llm_content

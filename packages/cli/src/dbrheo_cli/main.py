@@ -46,31 +46,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # 尝试加载.env文件
 try:
     from dotenv import load_dotenv
-    # 支持多个可能的.env文件位置，注意大小写变化
     current_file = Path(__file__).resolve()
-    base_paths = [
-        current_file.parent.parent.parent.parent.parent,  # 向上5级到gemini-cli目录
-        current_file.parent.parent.parent.parent,  # 向上4级
-        current_file.parent.parent.parent,  # CLI包目录
-        Path.cwd(),  # 当前工作目录
+    
+    # 优先级顺序：当前工作目录 > 项目根目录 > 其他路径
+    search_paths = [
+        Path.cwd() / ".env",  # 当前工作目录
+        current_file.parent.parent.parent.parent.parent / ".env",  # 项目根目录
+        current_file.parent.parent.parent.parent / ".env",
+        current_file.parent.parent.parent / ".env",
     ]
     
-    # 尝试不同的目录名称组合
-    for base in base_paths:
-        for dirname in ["DbRheo", "Dbrheo", "dbrheo"]:
-            env_path = base / "学习中" / dirname / ".env"
-            if env_path.exists():
-                load_dotenv(env_path)
-                print(f"[INFO] Loaded .env from: {env_path}")
-                break
-        # 也尝试直接在base目录下
-        env_path = base / ".env"
+    for env_path in search_paths:
         if env_path.exists():
-            load_dotenv(env_path)
+            load_dotenv(env_path, override=True)
             print(f"[INFO] Loaded .env from: {env_path}")
             break
 except ImportError:
-    # 如果没有安装python-dotenv，继续运行
     pass
 
 from dbrheo_cli.app.cli import DbRheoCLI
@@ -95,6 +86,12 @@ def setup_signal_handlers(cli: DbRheoCLI):
         if hasattr(cli, 'signal') and cli.signal:
             cli.signal.abort()
         
+        # 清理资源（保存对话历史等）
+        try:
+            cli.cleanup()
+        except:
+            pass
+        
         # 强制退出事件循环
         try:
             loop = asyncio.get_event_loop()
@@ -103,7 +100,7 @@ def setup_signal_handlers(cli: DbRheoCLI):
         except:
             pass
         
-        # 如果上述方法都不行，强制退出
+        # 退出
         os._exit(0)
     
     signal.signal(signal.SIGINT, signal_handler)

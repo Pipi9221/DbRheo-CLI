@@ -2,6 +2,7 @@
 日志系统集成 - 将实时日志集成到DbRheo的各个组件
 """
 
+from ..utils.content_helper import get_parts, get_role, get_text
 from typing import Dict, Any, Optional
 from functools import wraps
 import asyncio
@@ -34,13 +35,13 @@ def log_chat_interaction(func):
             if hasattr(self, 'history') and self.history:
                 last_response = None
                 for item in reversed(self.history):
-                    if item.get('role') == 'model':
+                    if get_role(item) == 'model':
                         last_response = item
                         break
                         
                 if last_response:
                     model_text = ""
-                    for part in last_response.get('parts', []):
+                    for part in get_parts(last_response):
                         if isinstance(part, dict) and 'text' in part:
                             model_text += part['text']
                     if model_text:

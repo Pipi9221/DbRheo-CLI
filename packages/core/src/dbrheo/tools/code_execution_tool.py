@@ -17,6 +17,7 @@ from ..types.tool_types import ToolResult
 from ..types.core_types import AbortSignal
 from .base import DatabaseTool
 from ..config.base import DatabaseConfig
+from ..utils.debug_logger import log_info, DebugLogger
 
 
 class CodeExecutionTool(DatabaseTool):
@@ -135,7 +136,6 @@ class CodeExecutionTool(DatabaseTool):
     def validate_tool_params(self, params: Dict[str, Any]) -> Optional[str]:
         """验证参数"""
         # 调试：打印接收到的参数
-        from ..utils.debug_logger import log_info
         log_info("CodeExecution", f"Received params: {params}")
         
         code = params.get("code", "").strip()

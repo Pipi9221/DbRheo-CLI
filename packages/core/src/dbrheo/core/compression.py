@@ -3,6 +3,7 @@
 当对话历史过长时自动压缩，保持Token在限制范围内
 """
 
+from ..utils.content_helper import get_parts, get_role, get_text
 from typing import List, Optional, Dict, Any
 from ..types.core_types import Content
 from .chat import DatabaseChat
@@ -33,15 +34,15 @@ async def try_compress_chat(
     if token_count is None:
         return None
         
-    # 压缩阈值：70%（与Gemini CLI一致）
+    # 压缩阈值：50%（更早触发压缩，避免会话过长）
     token_limit = _get_token_limit(chat.config.get_model())
-    compression_threshold = 0.7 * token_limit
+    compression_threshold = 0.5 * token_limit
     
     if not force and token_count < compression_threshold:
         return None
         
-    # 确定压缩边界：保留最近30%的历史
-    preserve_threshold = 0.3
+    # 确定压缩边界：保留最近40%的历史（保留更多上下文）
+    preserve_threshold = 0.4
     compress_before_index = _find_index_after_fraction(
         curated_history, 1 - preserve_threshold
     )
@@ -78,8 +79,8 @@ async def _count_tokens(history: List[Content]) -> Optional[int]:
     # 可以使用tiktoken或调用Gemini API的计数接口
     total_chars = 0
     for content in history:
-        for part in content.get('parts', []):
-            if part.get('text'):
+        for part in get_parts(content):
+            if get_text(part):
                 total_chars += len(part['text'])
     
     # 粗略估算：4个字符约等于1个token
@@ -113,9 +114,9 @@ async def _compress_history_segment(
     # 临时实现：简单的文本摘要
     summary_parts = []
     for content in history_segment:
-        role = content.get('role', 'unknown')
-        for part in content.get('parts', []):
-            if part.get('text'):
+        role = get_role(content)
+        for part in get_parts(content):
+            if get_text(part):
                 text = part['text'][:100] + "..." if len(part['text']) > 100 else part['text']
                 summary_parts.append(f"{role}: {text}")
                 

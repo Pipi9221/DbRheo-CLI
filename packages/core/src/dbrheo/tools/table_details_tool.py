@@ -8,6 +8,7 @@ from ..types.tool_types import ToolResult
 from ..types.core_types import AbortSignal
 from .base import DatabaseTool
 from ..config.base import DatabaseConfig
+from ..utils.debug_logger import log_info, DebugLogger
 
 
 class GetTableDetailsTool(DatabaseTool):
@@ -114,7 +115,6 @@ class GetTableDetailsTool(DatabaseTool):
         agent_feedback = params.get("_agent_feedback")
         if agent_feedback:
             # 将反馈信息传递给Agent，但不阻止执行
-            from ..utils.debug_logger import log_info
             log_info("TableDetails", f"Agent feedback: {agent_feedback}")
         
         try:

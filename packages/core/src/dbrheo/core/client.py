@@ -139,7 +139,7 @@ class DatabaseClient:
         self.session_turn_count += 1
         
         # 1. 会话级别限制检查
-        max_session_turns = self.config.get("max_session_turns", 100)
+        max_session_turns = self.config.get("max_session_turns", 50)
         if max_session_turns > 0 and self.session_turn_count > max_session_turns:
             yield {"type": "max_session_turns"}
             return

@@ -4,6 +4,7 @@ Gemini API服务 - 处理与Google Gemini API的通信
 完全对齐Gemini CLI的API调用方式
 """
 
+from ..utils.content_helper import get_parts, get_role, get_text
 import os
 from typing import List, Dict, Any, Optional, AsyncIterator
 import google.generativeai as genai
@@ -11,6 +12,7 @@ from ..types.core_types import Content, PartListUnion, AbortSignal
 from ..config.base import DatabaseConfig
 from ..utils.debug_logger import DebugLogger
 from ..utils.retry_with_backoff import retry_with_backoff, RetryOptions
+from ..utils.debug_logger import log_info, DebugLogger
 
 
 class GeminiService:
@@ -86,7 +88,6 @@ class GeminiService:
         """
         try:
             # 调试：打印调用信息
-            from ..utils.debug_logger import log_info
             log_info("Gemini", f"send_message_stream called")
             log_info("Gemini", f"History length: {len(contents)} messages")
             log_info("Gemini", f"System instruction length: {len(system_instruction) if system_instruction else 0} chars")
@@ -94,7 +95,7 @@ class GeminiService:
             
             # 计算历史内容的总字符数
             total_chars = sum(
-                sum(len(part.get('text', '')) for part in msg.get('parts', []))
+                sum(len(get_text(part)) for part in get_parts(msg))
                 for msg in contents
             )
             log_info("Gemini", f"Total history content: {total_chars} chars")
@@ -157,7 +158,6 @@ class GeminiService:
                 
         except Exception as e:
             # 错误处理 - 记录完整错误信息
-            from ..utils.debug_logger import log_error
             log_error("Gemini", f"API error: {type(e).__name__}: {str(e)}")
             
             # 在调试模式下显示完整错误，否则显示友好提示
@@ -263,8 +263,8 @@ class GeminiService:
                 "parts": []
             }
             
-            for part in content.get("parts", []):
-                if part.get("text"):
+            for part in get_parts(content):
+                if get_text(part):
                     prepared_content["parts"].append({"text": part["text"]})
                 elif part.get("function_call"):
                     prepared_content["parts"].append({"function_call": part["function_call"]})
@@ -321,11 +321,11 @@ class GeminiService:
                                 "args": dict(call.args) if hasattr(call, 'args') else {}
                             })
                         # 处理文本（如果没有从 chunk.text 获取到）
-                        elif hasattr(part, 'text') and part.text and not result.get("text"):
+                        elif hasattr(part, 'text') and part.text and not get_text(result):
                             text_parts.append(part.text)
                     
                     # 合并文本部分
-                    if text_parts and not result.get("text"):
+                    if text_parts and not get_text(result):
                         result["text"] = "".join(text_parts)
                     
                     # 只在有函数调用时添加function_calls字段
@@ -347,7 +347,6 @@ class GeminiService:
             self._stream_token_tracker = token_info
             
             # 详细调试信息
-            from ..utils.debug_logger import log_info
             log_info("Gemini", f"🔍 TOKEN DEBUG - Chunk #{self._chunk_count} has usage_metadata:")
             log_info("Gemini", f"   - prompt_tokens: {token_info['prompt_tokens']}")
             log_info("Gemini", f"   - completion_tokens: {token_info['completion_tokens']}")
@@ -385,7 +384,6 @@ class GeminiService:
                     self._stream_token_tracker = token_info
                     
                     # 详细调试信息
-                    from ..utils.debug_logger import log_info
                     log_info("Gemini", f"🔍 TOKEN DEBUG - Chunk #{self._chunk_count} has usage_metadata in candidate[{idx}]:")
                     log_info("Gemini", f"   - prompt_tokens: {token_info['prompt_tokens']}")
                     log_info("Gemini", f"   - completion_tokens: {token_info['completion_tokens']}")
@@ -453,7 +451,6 @@ class GeminiService:
                 **model_config
             )
             self._cached_model_config = model_config.copy()
-            from ..utils.debug_logger import log_info
             log_info("Gemini", "Created new GenerativeModel instance with cached config")
         
         return self._cached_model

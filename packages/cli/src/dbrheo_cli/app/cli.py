@@ -61,10 +61,17 @@ class DbRheoCLI:
     def _init_backend(self):
         """初始化后端连接，保持灵活性"""
         # 创建数据库配置
-        if self.config.db_file:
-            self.db_config = TestDatabaseConfig.create_with_sqlite_database(
-                self.config.db_file
-            )
+        db_file = self.config.db_file
+        
+        # 如果没有命令行参数，尝试从环境变量读取
+        if not db_file:
+            db_url = os.environ.get('DATABASE_URL') or os.environ.get('DBRHEO_DATABASE_URL')
+            if db_url and db_url.startswith('sqlite:///'):
+                db_file = db_url.replace('sqlite:///', '')
+                log_info("CLI", f"Using database from environment: {db_file}")
+        
+        if db_file:
+            self.db_config = TestDatabaseConfig.create_with_sqlite_database(db_file)
         else:
             # 默认使用内存数据库
             self.db_config = TestDatabaseConfig.create_with_memory_database()
@@ -928,6 +935,14 @@ class DbRheoCLI:
         
         # 设置运行标志
         self.running = False
+        
+        # 保存对话历史
+        if hasattr(self, 'client') and hasattr(self.client, 'chat'):
+            try:
+                self.client.chat.save_conversation_log()
+                log_info("CLI", "Conversation history saved")
+            except Exception as e:
+                log_info("CLI", f"Failed to save conversation: {e}")
         
         # 显示 token 统计（如果有的话）
         if hasattr(self, 'client') and hasattr(self.client, 'token_statistics'):

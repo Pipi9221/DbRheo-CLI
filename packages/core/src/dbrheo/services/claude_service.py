@@ -3,6 +3,7 @@ Claude API 服务 - 处理与 Anthropic Claude API 的通信
 保持与 GeminiService 相同的接口，实现格式转换
 """
 
+from ..utils.content_helper import get_parts, get_role, get_text
 import os
 import json
 from typing import List, Dict, Any, Optional, Iterator
@@ -248,13 +249,13 @@ class ClaudeService:
         
         for content in contents:
             # 转换角色
-            role = "assistant" if content.get("role") == "model" else content.get("role", "user")
+            role = "assistant" if get_role(content) == "model" else content.get("role", "user")
             
             # 收集不同类型的内容
             text_parts = []
             tool_use_parts = []
             tool_result_parts = []
-            parts = content.get("parts", [])
+            parts = get_parts(content)
             
             for part in parts:
                 if isinstance(part, dict):

@@ -3,11 +3,13 @@ DatabaseTurn - Turn系统实现
 管理单个对话轮次，只收集工具调用不执行，完全对齐Gemini CLI
 """
 
+from ..utils.content_helper import get_parts, get_role, get_text
 from typing import List, AsyncIterator
 from ..types.core_types import PartListUnion, AbortSignal
 from ..types.tool_types import ToolCallRequestInfo
 from .chat import DatabaseChat
 from ..utils.debug_logger import DebugLogger
+from ..utils.debug_logger import log_info, DebugLogger
 
 
 class DatabaseTurn:
@@ -40,7 +42,7 @@ class DatabaseTurn:
             if DebugLogger.get_rules()["show_chunk_details"]:
                 DebugLogger.log_turn_event("chunk_received", chunk)
             # 处理文本内容
-            if chunk.get('text'):
+            if get_text(chunk):
                 yield {'type': 'Content', 'value': chunk['text']}
                 
             # 处理思维内容
@@ -74,7 +76,6 @@ class DatabaseTurn:
             # 处理 token 使用信息 - 新增事件类型
             if chunk.get('token_usage'):
                 # 详细调试信息
-                from ..utils.debug_logger import log_info
                 log_info("Turn", f"🔴 TOKEN EVENT - Turn {self.prompt_id} emitting TokenUsage event:")
                 log_info("Turn", f"   - prompt_tokens: {chunk['token_usage'].get('prompt_tokens', 0)}")
                 log_info("Turn", f"   - completion_tokens: {chunk['token_usage'].get('completion_tokens', 0)}")

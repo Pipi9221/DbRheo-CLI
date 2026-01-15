@@ -253,11 +253,11 @@ class SQLTool(DatabaseTool):
         rows = result.get('rows', [])
         row_count = len(rows)
         
-        # 为LLM准备简洁的内容
+        # 为LLM准备完整内容（不截断，让AI看到所有数据）
         llm_content = {
             'columns': columns,
             'row_count': row_count,
-            'sample_rows': rows[:10] if row_count > 10 else rows,
+            'rows': rows,  # 返回所有行，不截断
             'execution_time': f"{execution_time:.2f}s"
         }
         
@@ -308,16 +308,17 @@ class SQLTool(DatabaseTool):
         if not operation:
             # 仅在适配器未提供描述时使用基础映射
             operation_map = {
-                'INSERT': self._('sql_op_insert', default='insert'),
-                'UPDATE': self._('sql_op_update', default='update'), 
-                'DELETE': self._('sql_op_delete', default='delete'),
-                'CREATE': self._('sql_op_create', default='create'),
-                'ALTER': self._('sql_op_alter', default='alter'),
-                'DROP': self._('sql_op_drop', default='drop'),
-                'DML': self._('sql_op_dml', default='data manipulation'),
-                'DDL': self._('sql_op_ddl', default='data definition')
+                'INSERT': self._('sql_op_insert', default='INSERT'),
+                'UPDATE': self._('sql_op_update', default='UPDATE'), 
+                'DELETE': self._('sql_op_delete', default='DELETE'),
+                'CREATE': self._('sql_op_create', default='CREATE'),
+                'ALTER': self._('sql_op_alter', default='ALTER'),
+                'DROP': self._('sql_op_drop', default='DROP'),
+                'DML': self._('sql_op_dml', default='DML'),
+                'DDL': self._('sql_op_ddl', default='DDL'),
+                'UNKNOWN': self._('sql_op_unknown', default='SQL')
             }
-            operation = operation_map.get(sql_type, self._('sql_op_generic', default='{type} operation', type=sql_type))
+            operation = operation_map.get(sql_type, sql_type)
         if affected_rows > 0:
             summary = self._('sql_command_success_rows', default="{operation} successful, affected {rows} rows", operation=operation, rows=affected_rows)
         else:

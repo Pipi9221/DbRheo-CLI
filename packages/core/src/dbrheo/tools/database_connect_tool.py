@@ -13,6 +13,7 @@ from ..types.core_types import AbortSignal
 from ..config.base import DatabaseConfig
 from ..adapters.adapter_factory import get_adapter, list_supported_databases
 from ..adapters.connection_string import ConnectionStringParser
+from ..utils.debug_logger import log_info, DebugLogger
 
 
 class DatabaseConnectTool(DatabaseTool):
@@ -678,7 +679,7 @@ database_connect(
         
         if not local_connections and not global_aliases:
             display_text += f"{self._('db_connect_no_active_connections', default='没有活动的数据库连接')}\n"
-            display_text += f"\n{self._('db_connect_use_connect_hint', default="使用 action='connect' 创建新连接")}"
+            display_text += f"\n{self._('db_connect_use_connect_hint', default='Use action=connect to connect database')}"
         
         return ToolResult(
             summary=self._('db_connect_found_connections', default="Found {count} active connections", count=len(set(local_connections + global_aliases))),
@@ -694,7 +695,6 @@ database_connect(
         """建立SSH隧道"""
         try:
             # 记录调试信息
-            from ..utils.debug_logger import log_info, DebugLogger
             log_info("SSH_TUNNEL", f"Starting SSH tunnel setup with config: {ssh_config}")
             
             # 解析原始连接字符串获取目标主机和端口

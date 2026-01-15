@@ -3,6 +3,7 @@ OpenAI API 服务 - 处理与 OpenAI API 的通信
 支持 GPT-3.5、GPT-4、o1 等模型，保持与 GeminiService 相同的接口
 """
 
+from ..utils.content_helper import get_parts, get_role, get_text
 import os
 import json
 from typing import List, Dict, Any, Optional, Iterator
@@ -27,19 +28,27 @@ class OpenAIService:
         
     def _setup_api(self):
         """设置 OpenAI API"""
-        # 获取 API 密钥 - 支持多种配置方式
+        # 获取 API 密钥 - 支持多种配置方式（包括阿里百炼）
         api_key = (
             self.config.get("openai_api_key") or
-            os.getenv("OPENAI_API_KEY")
+            os.getenv("OPENAI_API_KEY") or
+            self.config.get("dashscope_api_key") or
+            os.getenv("DASHSCOPE_API_KEY") or
+            self.config.get("ali_bailian_api_key") or
+            os.getenv("ALI_BAILIAN_API_KEY")
         )
         
         if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
+            raise ValueError("OPENAI_API_KEY or DASHSCOPE_API_KEY environment variable is required")
             
-        # 支持自定义 API 基础 URL（兼容 API）
+        # 支持自定义 API 基础 URL（兼容 API，包括阿里百炼）
         api_base = (
             self.config.get("openai_api_base") or
             os.getenv("OPENAI_API_BASE") or
+            self.config.get("dashscope_base_url") or
+            os.getenv("DASHSCOPE_BASE_URL") or
+            self.config.get("ali_bailian_api_base") or
+            os.getenv("ALI_BAILIAN_API_BASE") or
             "https://api.openai.com/v1"
         )
         
@@ -173,6 +182,21 @@ class OpenAIService:
                     # 如果已经生成了函数调用，重置状态
                     if processed.get("function_calls"):
                         current_function_call = None
+            
+            # 流结束后，如果还有未返回的函数调用，立即返回
+            if current_function_call and current_function_call.get("name") and current_function_call.get("arguments"):
+                try:
+                    args = json.loads(current_function_call["arguments"])
+                    log_info("OpenAI", f"✅ Returning accumulated function call at stream end: {current_function_call['name']}")
+                    yield {
+                        "function_calls": [{
+                            "id": current_function_call["id"],
+                            "name": current_function_call["name"],
+                            "args": args
+                        }]
+                    }
+                except Exception as e:
+                    log_error("OpenAI", f"Failed to parse accumulated function call: {e}")
                     
         except Exception as e:
             log_error("OpenAI", f"API error: {type(e).__name__}: {str(e)}")
@@ -197,6 +221,9 @@ class OpenAIService:
         try:
             # 转换消息格式
             messages = self._gemini_to_openai_messages(contents, system_instruction)
+            
+            # 移除所有 tool 相关消息（JSON 生成不需要工具调用）
+            messages = [msg for msg in messages if msg["role"] not in ["tool"] and "tool_calls" not in msg]
             
             # 添加 JSON 指令
             json_instruction = f"Respond with valid JSON matching this schema: {json.dumps(schema, indent=2)}"
@@ -256,13 +283,13 @@ class OpenAIService:
         
         for content in contents:
             # 转换角色
-            role = "assistant" if content.get("role") == "model" else content.get("role", "user")
+            role = "assistant" if get_role(content) == "model" else content.get("role", "user")
             
             # 提取内容
             text_parts = []
             tool_calls = []
             
-            parts = content.get("parts", [])
+            parts = get_parts(content)
             for part in parts:
                 if isinstance(part, dict):
                     if "text" in part:
@@ -319,7 +346,7 @@ class OpenAIService:
         if DebugLogger.should_log("DEBUG"):
             log_info("OpenAI", f"修复前的消息数量: {len(messages)}")
             for idx, msg in enumerate(messages):
-                role = msg.get("role", "unknown")
+                role = get_role(msg)
                 if "tool_calls" in msg:
                     log_info("OpenAI", f"  [{idx}] {role} - has tool_calls: {[tc['id'] for tc in msg['tool_calls']]}")
                 elif role == "tool":
@@ -419,7 +446,7 @@ class OpenAIService:
         if DebugLogger.should_log("DEBUG"):
             log_info("OpenAI", f"修复后的消息数量: {len(final_messages)}")
             for idx, msg in enumerate(final_messages):
-                role = msg.get("role", "unknown")
+                role = get_role(msg)
                 if "tool_calls" in msg:
                     log_info("OpenAI", f"  [{idx}] {role} - has tool_calls: {[tc['id'] for tc in msg['tool_calls']]}")
                 elif role == "tool":

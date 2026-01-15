@@ -176,30 +176,30 @@ class DatabaseToolRegistry:
             priority=75
         )
         
-        # 注册网络搜索工具
-        web_search_tool = self._create_tool(WebSearchTool)
-        self.register_tool(
-            tool=web_search_tool,
-            capabilities={
-                ToolCapability.SEARCH,
-                ToolCapability.EXPLORE
-            },
-            tags={"web", "search", "online", "documentation", "auxiliary"},
-            priority=65
-        )
+        # 注册网络搜索工具 - 暂时注释，不需要网络服务
+        # web_search_tool = self._create_tool(WebSearchTool)
+        # self.register_tool(
+        #     tool=web_search_tool,
+        #     capabilities={
+        #         ToolCapability.SEARCH,
+        #         ToolCapability.EXPLORE
+        #     },
+        #     tags={"web", "search", "online", "documentation", "auxiliary"},
+        #     priority=65
+        # )
         
-        # 注册网页内容获取工具
-        web_fetch_tool = self._create_tool(WebFetchTool)
-        self.register_tool(
-            tool=web_fetch_tool,
-            capabilities={
-                ToolCapability.READ,
-                ToolCapability.SEARCH,
-                ToolCapability.EXPLORE
-            },
-            tags={"web", "fetch", "content", "html", "auxiliary"},
-            priority=70
-        )
+        # 注册网页内容获取工具 - 暂时注释，不需要网络服务
+        # web_fetch_tool = self._create_tool(WebFetchTool)
+        # self.register_tool(
+        #     tool=web_fetch_tool,
+        #     capabilities={
+        #         ToolCapability.READ,
+        #         ToolCapability.SEARCH,
+        #         ToolCapability.EXPLORE
+        #     },
+        #     tags={"web", "fetch", "content", "html", "auxiliary"},
+        #     priority=70
+        # )
         
         # 注册目录浏览工具
         directory_list_tool = self._create_tool(DirectoryListTool)

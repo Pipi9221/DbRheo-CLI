@@ -26,7 +26,7 @@ class DatabaseConnectionManager:
         获取数据库连接（支持连接池）
         如果连接不健康，自动重新创建
         """
-        db_key = db_name or self.config.default_database
+        db_key = db_name or self.config.get("default_database", "default")
         
         # 检查现有连接
         if db_key in self.active_connections:
@@ -48,9 +48,25 @@ class DatabaseConnectionManager:
         # 这里需要实现具体的适配器工厂逻辑
         connection_string = self.config.get_connection_string(db_key)
         
-        # 暂时返回一个模拟的适配器
-        from .sqlite_adapter import SQLiteAdapter  # 假设有SQLite适配器
-        adapter = SQLiteAdapter(connection_string)
+        # 解析连接字符串，构建配置字典
+        # 对于 SQLite，格式为 sqlite:///path/to/database.db
+        from .sqlite_adapter import SQLiteAdapter
+        
+        # 提取数据库路径
+        if connection_string.startswith('sqlite:///'):
+            db_path = connection_string.replace('sqlite:///', '')
+            config = {
+                'database': db_path,
+                'type': 'sqlite'
+            }
+        else:
+            # 默认配置
+            config = {
+                'database': ':memory:',
+                'type': 'sqlite'
+            }
+        
+        adapter = SQLiteAdapter(config)
         await adapter.connect()
         return adapter
         

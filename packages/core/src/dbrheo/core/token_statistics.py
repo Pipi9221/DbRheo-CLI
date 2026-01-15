@@ -6,6 +6,7 @@ Token 使用统计管理
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
+from ..utils.debug_logger import log_info, DebugLogger
 
 
 @dataclass
@@ -36,7 +37,6 @@ class TokenStatistics:
         )
         
         # 详细调试
-        from ..utils.debug_logger import log_info
         log_info("TokenStats", f"ADDING RECORD #{len(self.records) + 1}:")
         log_info("TokenStats", f"   - Model: {model}")
         

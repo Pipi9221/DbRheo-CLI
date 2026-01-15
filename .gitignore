@@ -120,6 +120,10 @@ session.md
 **/session.md
 dependencies_report.txt
 
+# Gradio history (keep local)
+.gradio_history/
+
+
 # User configuration
 config.yaml
 

@@ -690,28 +690,32 @@ class DatabaseTool(ABC, Generic[TParams, TResult]):
         
         if self._i18n:
             # 检查i18n是否有get方法（支持字典和对象两种形式）
-            text = None
-            if isinstance(self._i18n, dict) and 'get' in self._i18n:
-                # 字典形式的i18n适配器
-                text = self._i18n['get'](key, **kwargs)
-            elif hasattr(self._i18n, 'get'):
-                # 对象形式的i18n
-                text = self._i18n.get(key, **kwargs)
-            
-            if text is not None:
-                # 如果i18n返回的是key本身（说明没找到翻译），则使用默认值
-                if text == key:
-                    if default is not None:
-                        text = default
-                        # 手动格式化默认文本
-                        for k, v in kwargs.items():
-                            text = text.replace(f'{{{k}}}', str(v))
-                    else:
-                        text = default_texts.get(key, key)
-                        # 手动格式化默认文本
-                        for k, v in kwargs.items():
-                            text = text.replace(f'{{{k}}}', str(v))
-                return text
+            try:
+                text = None
+                if isinstance(self._i18n, dict) and 'get' in self._i18n:
+                    # 字典形式的i18n适配器
+                    text = self._i18n['get'](key, **kwargs)
+                elif hasattr(self._i18n, 'get'):
+                    # 对象形式的i18n
+                    text = self._i18n.get(key, **kwargs)
+                
+                if text is not None:
+                    # 如果i18n返回的是key本身（说明没找到翻译），则使用默认值
+                    if text == key:
+                        if default is not None:
+                            text = default
+                            # 手动格式化默认文本
+                            for k, v in kwargs.items():
+                                text = text.replace(f'{{{k}}}', str(v))
+                        else:
+                            text = default_texts.get(key, key)
+                            # 手动格式化默认文本
+                            for k, v in kwargs.items():
+                                text = text.replace(f'{{{k}}}', str(v))
+                    return text
+            except Exception:
+                # i18n调用失败，回退到默认文本
+                pass
         
         # 使用优先级：自定义默认值 > 内置默认文本 > key本身
         if default is not None:
@@ -719,8 +723,12 @@ class DatabaseTool(ABC, Generic[TParams, TResult]):
         else:
             text = default_texts.get(key, key)
         
-        # 简单的格式化
-        for k, v in kwargs.items():
-            text = text.replace(f'{{{k}}}', str(v))
+        # 使用 format() 方法进行格式化，支持 {time:.2f} 等格式
+        try:
+            text = text.format(**kwargs)
+        except (KeyError, ValueError):
+            # 如果格式化失败，回退到简单替换
+            for k, v in kwargs.items():
+                text = text.replace(f'{{{k}}}', str(v))
         
         return text

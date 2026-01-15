@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from .base import DatabaseAdapter
 from ..types.core_types import AbortSignal
 from ..utils.type_converter import convert_rows_to_serializable
+from ..utils.debug_logger import log_info, DebugLogger
 
 
 class MySQLAdapter(DatabaseAdapter):
@@ -84,7 +85,6 @@ class MySQLAdapter(DatabaseAdapter):
             debug_params = self.connection_params.copy()
             if 'password' in debug_params:
                 debug_params['password'] = '***'
-            from ..utils.debug_logger import log_info
             log_info("MySQLAdapter", f"Connecting with params: {debug_params}")
             
             # 优先使用连接池

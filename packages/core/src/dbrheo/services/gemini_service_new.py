@@ -18,6 +18,7 @@ from ..types.core_types import Content, PartListUnion, AbortSignal
 from ..config.base import DatabaseConfig
 from ..utils.debug_logger import DebugLogger
 from ..utils.retry_with_backoff import retry_with_backoff, RetryOptions
+from ..utils.debug_logger import log_info, DebugLogger
 
 
 class GeminiService:
@@ -53,7 +54,12 @@ class GeminiService:
             os.getenv("GEMINI_API_KEY")
         )
         if not api_key:
-            raise ValueError("GOOGLE_API_KEY or GEMINI_API_KEY environment variable is required")
+            # 不在初始化时抛出错误，而是在实际使用时才检查
+            self._api_key_missing = True
+            self._client = None
+            return
+        
+        self._api_key_missing = False
         
         # 创建客户端
         self._client = genai.Client(api_key=api_key)
@@ -62,7 +68,6 @@ class GeminiService:
         model_name = self.config.get_model() or "gemini-2.5-flash"
         
         # 调试
-        from ..utils.debug_logger import log_info
         log_info("Gemini", f"config.get_model()返回: {self.config.get_model()}")
         log_info("Gemini", f"使用的model_name: {model_name}")
         
@@ -118,7 +123,6 @@ class GeminiService:
         """
         # 检查是否启用显式缓存
         enable_cache = self.config.get("enable_explicit_cache", True)
-        from ..utils.debug_logger import log_info
         log_info("Gemini", f"Explicit cache enabled: {enable_cache}")
         
         if not enable_cache:
@@ -138,7 +142,6 @@ class GeminiService:
             
         # 需要创建新缓存
         try:
-            from ..utils.debug_logger import log_info
             log_info("Gemini", "Creating new explicit cache...")
             
             # 准备缓存配置
@@ -189,7 +192,6 @@ class GeminiService:
             
         except Exception as e:
             # 缓存创建失败，记录但不影响正常功能
-            from ..utils.debug_logger import log_error
             log_error("Gemini", f"Failed to create explicit cache: {e}")
             return None
         
@@ -204,17 +206,21 @@ class GeminiService:
         发送消息并返回流式响应（同步生成器）
         完全保持原有接口不变
         """
+        # 在实际使用时检查API key
+        if getattr(self, '_api_key_missing', False):
+            raise ValueError("GOOGLE_API_KEY or GEMINI_API_KEY environment variable is required")
+        
         try:
             # 调试：打印调用信息
-            from ..utils.debug_logger import log_info
             log_info("Gemini", f"send_message_stream called (new SDK)")
             log_info("Gemini", f"History length: {len(contents)} messages")
             log_info("Gemini", f"System instruction length: {len(system_instruction) if system_instruction else 0} chars")
             log_info("Gemini", f"Tools count: {len(tools) if tools else 0}")
             
             # 计算历史内容的总字符数
+            from ..utils.content_helper import get_parts, get_text
             total_chars = sum(
-                sum(len(part.get('text', '')) for part in msg.get('parts', []))
+                sum(len(get_text(part)) for part in get_parts(msg))
                 for msg in contents
             )
             log_info("Gemini", f"Total history content: {total_chars} chars")
@@ -284,7 +290,6 @@ class GeminiService:
                 
         except Exception as e:
             # 错误处理 - 记录完整错误信息
-            from ..utils.debug_logger import log_error
             log_error("Gemini", f"API error: {type(e).__name__}: {str(e)}")
             
             # 在调试模式下显示完整错误，否则显示友好提示
@@ -353,53 +358,42 @@ class GeminiService:
         """准备API请求的内容格式 - 与原版保持一致"""
         prepared = []
         for content in contents:
-            # 防御性检查：如果是 protobuf 对象，先转换为字典
-            if hasattr(content, '_pb'):
+            # 转换为字典（支持dict和对象两种格式）
+            if isinstance(content, dict):
+                content_dict = content
+            else:
+                # 对象格式，转换为字典
+                from ..utils.content_helper import get_parts, get_role
                 content_dict = {
-                    'role': content.role,
-                    'parts': []
+                    'role': get_role(content),
+                    'parts': get_parts(content)
                 }
-                for part in content.parts:
-                    if hasattr(part, 'text'):
-                        content_dict['parts'].append({'text': part.text})
-                    elif hasattr(part, 'function_call'):
-                        # 递归转换嵌套的 protobuf 对象
-                        fc_dict = {}
-                        if hasattr(part.function_call, '__dict__'):
-                            for key, value in part.function_call.__dict__.items():
-                                if not key.startswith('_'):
-                                    fc_dict[key] = value
-                        content_dict['parts'].append({'function_call': fc_dict})
-                    elif hasattr(part, 'function_response'):
-                        fr_dict = {}
-                        if hasattr(part.function_response, '__dict__'):
-                            for key, value in part.function_response.__dict__.items():
-                                if not key.startswith('_'):
-                                    fr_dict[key] = value
-                        content_dict['parts'].append({'function_response': fr_dict})
-                content = content_dict
             
             prepared_content = {
-                "role": content["role"],
+                "role": content_dict["role"],
                 "parts": []
             }
             
-            for part in content.get("parts", []):
-                if part.get("text"):
-                    prepared_content["parts"].append({"text": part["text"]})
-                elif part.get("function_call"):
-                    prepared_content["parts"].append({"function_call": part["function_call"]})
-                elif part.get("function_response"):
-                    prepared_content["parts"].append({"function_response": part["function_response"]})
-                elif part.get("functionResponse"):
-                    # 转换驼峰式到下划线格式（Python SDK 使用 function_response）
-                    prepared_content["parts"].append({"function_response": part["functionResponse"]})
-                elif part.get("functionCall"):
-                    # 转换驼峰式到下划线格式
-                    prepared_content["parts"].append({"function_call": part["functionCall"]})
+            parts = content_dict.get("parts", [])
+            for part in parts:
+                # 支持dict和对象两种格式
+                if isinstance(part, dict):
+                    if part.get("text"):
+                        prepared_content["parts"].append({"text": part["text"]})
+                    elif part.get("function_call"):
+                        prepared_content["parts"].append({"function_call": part["function_call"]})
+                    elif part.get("function_response"):
+                        prepared_content["parts"].append({"function_response": part["function_response"]})
+                else:
+                    # 对象格式
+                    if hasattr(part, 'text') and part.text:
+                        prepared_content["parts"].append({"text": part.text})
+                    elif hasattr(part, 'function_call') and part.function_call:
+                        prepared_content["parts"].append({"function_call": part.function_call})
+                    elif hasattr(part, 'function_response') and part.function_response:
+                        prepared_content["parts"].append({"function_response": part.function_response})
             
             # 只有当parts不为空时才添加到prepared列表
-            # Gemini API 不允许空的 parts 数组
             if prepared_content["parts"]:
                 prepared.append(prepared_content)
             
@@ -434,7 +428,6 @@ class GeminiService:
                             # 更仔细地提取参数
                             args = {}
                             if hasattr(call, 'args') and call.args is not None:
-                                from ..utils.debug_logger import log_info
                                 log_info("Gemini", f"Function call args type: {type(call.args)}")
                                 log_info("Gemini", f"Function call args value: {call.args}")
                                 
@@ -446,15 +439,12 @@ class GeminiService:
                                     try:
                                         args = dict(call.args)
                                     except Exception as e:
-                                        from ..utils.debug_logger import log_error
                                         log_error("Gemini", f"Failed to convert args to dict: {e}")
                                         log_error("Gemini", f"Args type: {type(call.args)}, value: {call.args}")
                             else:
-                                from ..utils.debug_logger import log_info
                                 log_info("Gemini", f"Function call has no args or args is None")
                             
                             # 调试：打印提取的参数
-                            from ..utils.debug_logger import log_info
                             log_info("Gemini", f"Extracted function call: {call.name}, args: {args}")
                             
                             function_calls.append({
@@ -485,7 +475,6 @@ class GeminiService:
             cached_count = getattr(usage_metadata, 'cached_content_token_count', None)
             
             # 调试：直接访问属性
-            from ..utils.debug_logger import log_info
             log_info("Gemini", f"📊 CACHE DEBUG - Direct access:")
             log_info("Gemini", f"   - usage_metadata type: {type(usage_metadata)}")
             log_info("Gemini", f"   - cached_content_token_count: {usage_metadata.cached_content_token_count}")
@@ -510,7 +499,6 @@ class GeminiService:
             self._stream_token_tracker = token_info
             
             # 详细调试信息
-            from ..utils.debug_logger import log_info
             log_info("Gemini", f"🔍 TOKEN DEBUG - Chunk #{self._chunk_count} has usage_metadata:")
             log_info("Gemini", f"   - prompt_tokens: {token_info['prompt_tokens']}")
             log_info("Gemini", f"   - completion_tokens: {token_info['completion_tokens']}")
@@ -563,7 +551,6 @@ class GeminiService:
             
             if enable_code_execution and tools:
                 # 如果同时启用了代码执行和函数工具，优先使用函数工具
-                from ..utils.debug_logger import log_info
                 log_info("Gemini", "Code execution enabled but using function tools")
                 # 转换工具格式
                 try:
@@ -582,7 +569,6 @@ class GeminiService:
             elif enable_code_execution and not tools:
                 # 只有代码执行，没有函数工具
                 # 新SDK中代码执行的配置方式可能不同，需要查看文档
-                from ..utils.debug_logger import log_info
                 log_info("Gemini", "Code execution enabled (new SDK)")
                 # config_dict['tools'] = [{"code_execution": {}}]  # 待确认格式
             elif tools:

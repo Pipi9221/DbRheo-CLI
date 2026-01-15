@@ -82,13 +82,18 @@ class SQLiteAdapter(DatabaseAdapter):
             serializable_data = [convert_to_serializable(row) for row in result_data]
                 
             return {
+                "success": True,
                 "columns": columns,
-                "rows": serializable_data,
+                "data": serializable_data,
+                "rows": serializable_data,  # 兼容旧格式
                 "row_count": len(result_data)
             }
             
         except Exception as e:
-            raise Exception(f"Query execution failed: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
             
     async def execute_command(
         self, 
@@ -148,9 +153,10 @@ class SQLiteAdapter(DatabaseAdapter):
             for table in tables:
                 table_name = table["name"]
                 table_type = table["type"]
-                
+
                 if table_type == "table":
-                    schema_info["tables"][table_name] = await self.get_table_info(table_name)
+                    table_info = await self.get_table_info(table_name)
+                    schema_info["tables"][table_name] = table_info.get("columns", [])
                     schema_info["total_tables"] += 1
                 elif table_type == "view":
                     schema_info["views"][table_name] = {

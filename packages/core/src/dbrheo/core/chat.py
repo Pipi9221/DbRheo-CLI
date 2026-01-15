@@ -3,6 +3,7 @@ DatabaseChat - 对话管理
 实现双历史机制、历史过滤和验证，完全对齐Gemini CLI的GeminiChat
 """
 
+from ..utils.content_helper import get_parts, get_role, get_text
 from typing import List, Dict, Any, Optional, AsyncIterator
 from ..types.core_types import Content, PartListUnion
 from ..config.base import DatabaseConfig
@@ -44,6 +45,9 @@ class DatabaseChat:
         self._llm_service = None
         self._tools = None  # 缓存工具声明
         self._system_prompt = None  # 缓存系统提示词
+        
+        # 记录已保存的历史数量
+        self._saved_history_count = 0
         
     def get_history(self, curated: bool = False) -> List[Content]:
         """
@@ -94,14 +98,15 @@ class DatabaseChat:
         """
         内容有效性检查 - 完全参考Gemini CLI的isValidContent
         """
-        if not content.get('parts') or len(content['parts']) == 0:
+        parts = get_parts(content)
+        if not parts or len(parts) == 0:
             return False
             
-        for part in content['parts']:
+        for part in parts:
             if not part or len(part) == 0:
                 return False
             # 空文本无效（除非是thought）
-            if not part.get('thought') and part.get('text') == '':
+            if not part.get('thought') and get_text(part) == '':
                 return False
                 
         return True
@@ -140,6 +145,40 @@ class DatabaseChat:
     def set_history(self, history: List[Content]):
         """设置历史记录（用于压缩后更新）"""
         self.history = history
+    
+    def save_conversation_log(self, log_file: str = "logs/conversation_history.jsonl"):
+        """保存对话历史到文件（JSONL格式，增量保存）"""
+        import json
+        from pathlib import Path
+        import datetime
+        
+        # 只保存新增的对话
+        new_messages = self.history[self._saved_history_count:]
+        if not new_messages:
+            return
+        
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 追加模式写入新消息
+        with open(log_path, 'a', encoding='utf-8') as f:
+            for msg in new_messages:
+                role = msg.get('role', 'unknown')
+                text_parts = []
+                for part in get_parts(msg):
+                    if 'text' in part:
+                        text_parts.append(part['text'])
+                
+                if text_parts:
+                    log_entry = {
+                        'timestamp': datetime.datetime.now().isoformat(),
+                        'role': role,
+                        'content': ''.join(text_parts)
+                    }
+                    f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+        
+        # 更新已保存计数
+        self._saved_history_count = len(self.history)
         
     def _deep_clone(self, obj):
         """深度克隆对象 - 灵活处理各种数据类型，避免序列化问题"""
@@ -248,7 +287,7 @@ class DatabaseChat:
         
     async def send_message_stream(self, request: PartListUnion, prompt_id: str):
         """
-        发送消息到Gemini API并返回流式响应
+        发送消息 API并返回流式响应
         完全对齐Gemini CLI：让AI基于工具描述自主选择工具
         """
         from ..services.llm_factory import create_llm_service
@@ -306,7 +345,7 @@ class DatabaseChat:
         
         # 调试：显示历史总体信息
         total_history_chars = sum(
-            sum(len(part.get('text', '')) for part in msg.get('parts', []))
+            sum(len(get_text(part)) for part in get_parts(msg))
             for msg in full_history
         )
         log_info("Chat", f"📋 HISTORY ANALYSIS:")
@@ -314,10 +353,11 @@ class DatabaseChat:
         log_info("Chat", f"   - Total characters: {total_history_chars}")
         log_info("Chat", f"   - Message breakdown:")
         for i, msg in enumerate(full_history):
-            msg_chars = sum(len(part.get('text', '')) for part in msg.get('parts', []))
+            msg_chars = sum(len(get_text(part)) for part in get_parts(msg))
             msg_preview = ''
-            if msg.get('parts') and len(msg['parts']) > 0:
-                first_part = msg['parts'][0]
+            parts = get_parts(msg)
+            if parts and len(parts) > 0:
+                first_part = parts[0]
                 if 'text' in first_part:
                     msg_preview = first_part['text'][:30].replace('\n', ' ')
                 elif 'function_call' in first_part:
@@ -352,7 +392,7 @@ class DatabaseChat:
                 yield chunk
                 
                 # 收集响应内容用于保存到历史
-                if chunk.get('text'):
+                if get_text(chunk):
                     response_parts.append({'text': chunk['text']})
                 if chunk.get('function_calls'):
                     for call in chunk['function_calls']:

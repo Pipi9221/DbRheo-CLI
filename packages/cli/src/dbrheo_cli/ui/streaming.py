@@ -33,7 +33,11 @@ class StreamDisplay:
         self.in_code_block = False
         self.code_language = ""
         self.code_buffer = []
-        self.pending_content = ""  # 缓存未处理的内容
+        self.pending_content = ""
+        
+        # 缓冲控制
+        self.char_buffer = ""
+        self.last_output_time = 0
         
         # 可配置的显示选项
         self.code_theme = getattr(config, 'code_theme', 'monokai')
@@ -42,12 +46,13 @@ class StreamDisplay:
         
     async def add_content(self, content: str):
         """添加内容到流式显示"""
+        if not content:
+            return
+            
         if not self.is_streaming:
             self.is_streaming = True
-            # 显示AI响应前缀
             console.print("● ", end='')
         
-        # 累积待处理的内容
         self.pending_content += content
         
         # 处理完整的行
@@ -55,21 +60,14 @@ class StreamDisplay:
             line_end = self.pending_content.index('\n')
             line = self.pending_content[:line_end]
             self.pending_content = self.pending_content[line_end + 1:]
-            
-            # 处理单行
             await self._process_line(line + '\n')
         
-        # 如果不在代码块中，直接输出剩余内容
+        # 非代码块：聚合短文本后输出
         if not self.in_code_block and self.pending_content:
-            console.print(self.pending_content, end='')
-            self.pending_content = ""
-        
-        # 确保控制台刷新
-        try:
-            import sys
-            sys.stdout.flush()
-        except:
-            pass
+            # 如果累积了足够的字符或遇到标点，立即输出
+            if len(self.pending_content) >= 10 or any(p in self.pending_content for p in '。！？，、；：'):
+                console.print(self.pending_content, end='')
+                self.pending_content = ""
     
     async def _process_line(self, line: str):
         """处理单行内容"""

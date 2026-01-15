@@ -238,12 +238,13 @@ class ToolHandler:
                 data_rows = []
                 footer_info = ""
                 for i in range(table_start + 2, len(lines)):  # 跳过表头和分隔线
-                    line = lines[i]
+                    line = lines[i].strip()
                     if '|' in line:
                         row = [cell.strip() for cell in line.split('|') if cell.strip()]
-                        if len(row) == len(headers):
+                        # 只要有数据就添加，不严格要求列数匹配
+                        if row:
                             data_rows.append(row)
-                    else:
+                    elif line and not line.startswith('...'):
                         # 非表格行，可能是脚注信息
                         footer_info = '\n'.join(lines[i:]).strip()
                         break

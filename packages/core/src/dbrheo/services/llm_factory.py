@@ -32,6 +32,11 @@ class LLMServiceFactory:
             "module": "openai_service",
             "class": "OpenAIService", 
             "prefixes": ["gpt", "openai", "o1"]
+        },
+        "ali_bailian": {
+            "module": "openai_service",  # 阿里百炼兼容 OpenAI，直接使用 OpenAI 服务
+            "class": "OpenAIService",
+            "prefixes": ["qwen", "ali", "dashscope"]
         }
     }
     
@@ -55,9 +60,14 @@ class LLMServiceFactory:
         service_info = LLMServiceFactory._find_service_for_model(model_name)
         
         if not service_info:
-            # 如果没有找到匹配，默认使用 Gemini（保持向后兼容）
-            log_info("LLMFactory", f"Model '{model_name}' not recognized, using Gemini as default")
-            service_info = LLMServiceFactory.MODEL_MAPPINGS["gemini"]
+            # 根据已配置的API key自动选择服务
+            service_info = LLMServiceFactory._auto_detect_service(config)
+            if service_info:
+                log_info("LLMFactory", f"Model '{model_name}' not recognized, auto-detected service based on API keys")
+            else:
+                # 如果没有找到匹配，默认使用 Gemini（保持向后兼容）
+                log_info("LLMFactory", f"Model '{model_name}' not recognized, using Gemini as default")
+                service_info = LLMServiceFactory.MODEL_MAPPINGS["gemini"]
         
         # 动态导入和创建服务
         try:
@@ -109,6 +119,31 @@ class LLMServiceFactory:
                 if model_lower.startswith(prefix.lower()):
                     return service_info
                     
+        return None
+    
+    @staticmethod
+    def _auto_detect_service(config: DatabaseConfig) -> Optional[Dict[str, str]]:
+        """
+        根据已配置的API key自动检测应该使用的服务
+        
+        Args:
+            config: 数据库配置对象
+            
+        Returns:
+            服务信息字典或 None
+        """
+        import os
+        
+        # 按优先级检查API key
+        if os.getenv("DASHSCOPE_API_KEY") or os.getenv("ALI_BAILIAN_API_KEY"):
+            return LLMServiceFactory.MODEL_MAPPINGS["ali_bailian"]
+        elif os.getenv("OPENAI_API_KEY"):
+            return LLMServiceFactory.MODEL_MAPPINGS["openai"]
+        elif os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY"):
+            return LLMServiceFactory.MODEL_MAPPINGS["claude"]
+        elif os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
+            return LLMServiceFactory.MODEL_MAPPINGS["gemini"]
+        
         return None
     
     @staticmethod

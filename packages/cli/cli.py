@@ -9,6 +9,14 @@ import sys
 import os
 from pathlib import Path
 
+# 修复 Windows 终端编码问题
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    # 设置控制台代码页为 UTF-8
+    os.system('chcp 65001 >nul 2>&1')
+
 # 创建一个过滤的stderr包装器
 class FilteredStderr:
     def __init__(self, original_stderr):

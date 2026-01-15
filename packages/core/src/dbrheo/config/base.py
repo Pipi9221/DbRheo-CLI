@@ -185,6 +185,10 @@ class EnvironmentConfig(ConfigSource):
         self._env_mappings = {
             "DBRHEO_API_KEY": "google_api_key",
             "GOOGLE_API_KEY": "google_api_key",
+            "GEMINI_API_KEY": "google_api_key",
+            "DASHSCOPE_API_KEY": "dashscope_api_key",
+            "ALI_BAILIAN_API_KEY": "ali_bailian_api_key",
+            "DASHSCOPE_BASE_URL": "dashscope_base_url",
             "ANTHROPIC_API_KEY": "anthropic_api_key",
             "CLAUDE_API_KEY": "claude_api_key",
             "OPENAI_API_KEY": "openai_api_key",
@@ -431,3 +435,15 @@ class DatabaseConfig:
     def allows_dangerous_operations(self) -> bool:
         """是否允许危险操作"""
         return self.get("allow_dangerous_operations", False)
+    
+    def get_test_config(self, key: str) -> Any:
+        """获取测试配置（用于测试时共享对象）"""
+        if not hasattr(self, '_test_config'):
+            self._test_config = {}
+        return self._test_config.get(key)
+    
+    def set_test_config(self, key: str, value: Any):
+        """设置测试配置"""
+        if not hasattr(self, '_test_config'):
+            self._test_config = {}
+        self._test_config[key] = value
