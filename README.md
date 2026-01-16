@@ -11,6 +11,7 @@ DbRheo-CLI 是一个基于大语言模型的自然语言数据库查询系统，
 - 📊 数据可视化支持
 - 🌐 Web 界面（Gradio）
 - 🔒 SQL 风险评估与安全检查
+- ✅ 智能答案提取与比较（支持多实体、时间序列）
 
 ## 🚀 快速开始
 
@@ -97,6 +98,14 @@ DbRheo-CLI/
 │   ├── question/                # 测试问题集
 │   ├── answer/                  # 标准答案
 │   └── result/                  # 测试结果
+├── newtest/                     # 新测试框架
+│   ├── nl2sql/                  # NL2SQL Agent 测试
+│   │   ├── batch_test.py        # 批量测试脚本（含智能答案提取）
+│   │   ├── test_fixed_comparator.py # 答案比较器测试
+│   │   ├── reevaluate_results.py    # 重新评估测试结果
+│   │   ├── evaluations_*.jsonl  # 测试结果
+│   │   └── nl2sql_test_report.md # 测试报告
+│   └── baseline/                # Baseline Agent 测试
 ├── scripts/                     # 工具脚本
 │   └── fix_*.py                 # 修复脚本
 ├── db/                          # 数据库文件
@@ -182,9 +191,19 @@ DbRheo-CLI/
 - ✅ 多次运行记录追踪
 - ✅ 数据持久化（test/result/evaluations.jsonl）
 
+**智能答案提取与比较**：
+- 支持多实体对比答案（如"一汽大众: 9533 辆, 比亚迪: 31140 辆"）
+- 支持时间序列答案（如"1月: 4890辆; 2月: 3217辆; ..."）
+- 支持百分比答案（容差 0.01%）
+- 支持数值型答案（精确匹配）
+- 支持文本型答案（完全匹配）
+- 允许顺序差异和格式差异（如"辆"单位的有无）
+
 ## 🧪 测试与评估
 
 ### 运行测试
+
+**旧测试框架 (test/)**
 
 ```bash
 cd test
@@ -202,7 +221,24 @@ python run_baseline_test.py
 python run_benchmark.py
 ```
 
-详细说明请参考 [test/README.md](test/README.md)
+**新测试框架 (newtest/)**
+
+```bash
+cd newtest/nl2sql
+
+# 运行批量测试
+python batch_test.py
+
+# 测试修复后的比较器
+python test_fixed_comparator.py
+
+# 重新评估测试结果
+python reevaluate_results.py
+```
+
+详细说明请参考：
+- [test/README.md](test/README.md) - 旧测试框架文档
+- [newtest/nl2sql/nl2sql_test_report.md](newtest/nl2sql/nl2sql_test_report.md) - 新测试框架报告
 
 ## 📊 Baseline 对比实验
 
@@ -210,9 +246,12 @@ Baseline Agent 是一个基于 CSV 文件的查询方案，用于与 DbRheo NL2S
 
 **对比结果**：
 - Baseline Agent：70-85% 准确率
-- DbRheo Agent：95-100% 准确率
+- DbRheo NL2SQL Agent：95-100% 准确率
+- 智能答案提取支持多实体对比、时间序列等复杂答案格式
 
-详细说明请参考 [baseline/README.md](baseline/README.md)
+详细说明请参考：
+- [baseline/README.md](baseline/README.md) - Baseline Agent 说明
+- [newtest/nl2sql/nl2sql_test_report.md](newtest/nl2sql/nl2sql_test_report.md) - 最新测试报告
 
 ## 🔧 配置说明
 
@@ -228,6 +267,22 @@ Baseline Agent 是一个基于 CSV 文件的查询方案，用于与 DbRheo NL2S
 - **SQLite** - 轻量级，适合开发和测试
 - **MySQL** - 生产环境
 - **PostgreSQL** - 高级功能支持
+
+### 数据库数据处理策略
+
+项目采用简洁高效的数据处理策略：
+
+1. **数据源拆分**：从原始 CSV 拆分为测试集（月同比/环比）和数据源（销量和市场份额）
+2. **表结构拆分**：
+   - `vehicle_sales` 表：销量数据（unit='辆'）
+   - `market_share` 表：市场份额数据（unit='%'）
+3. **品牌和车型解析**：从 display_name 字段自动解析品牌和车型信息
+4. **日期格式统一**：使用 Pandas 统一为 YYYY-MM-DD 格式
+5. **简单别名映射**：通过 LLM 语义理解处理表述差异
+
+详细说明请参考：
+- [数据库结构](db/SCHEMA.md) - 数据库表结构
+- [Baseline 数据处理](baseline/data_scripts/README.md) - 数据处理脚本说明
 
 ### 日志配置
 
@@ -311,18 +366,19 @@ python test_new_features.py
 
 ## 🧹 项目维护
 
-### 清理临时文件
+### 数据备份
 
-项目会生成一些临时文件和日志，可以定期清理：
+重要数据文件：
+- `test/result/evaluations.jsonl` - 评估数据（主文件）
+- `test/result/evaluations.jsonl.bak` - 评估数据备份
+- `newtest/nl2sql/evaluations_*.jsonl` - 新测试框架评估数据
+- `.env` - 环境变量（包含 API 密钥）
 
-```bash
-# 方式1：自动清理（推荐）
-cleanup.bat
+建议定期备份这些文件。
 
-# 方式2：手动清理
-# 查看清理指南
-type CLEANUP_GUIDE.md
-```
+### 清理建议
+
+项目会生成一些临时文件和日志，可定期清理：
 
 **可清理的文件**：
 - 分析报告（`*_report.txt`、`*_failures*.txt`）
@@ -330,17 +386,7 @@ type CLEANUP_GUIDE.md
 - Python 缓存（`__pycache__/`）
 - 旧的评估导出（`test/result/evaluation_export_*.xlsx`）
 - 旧的评估目录（`.gradio_evaluations/`）
-
-详细说明请参考 [CLEANUP_GUIDE.md](CLEANUP_GUIDE.md)
-
-### 数据备份
-
-重要数据文件：
-- `test/result/evaluations.jsonl` - 评估数据（主文件）
-- `test/result/evaluations.jsonl.bak` - 评估数据备份
-- `.env` - 环境变量（包含 API 密钥）
-
-建议定期备份这些文件。
+- 临时测试脚本（如 `temp_fix.py`、`count_chars.py` 等）
 
 ## 🔗 相关文档
 
@@ -348,9 +394,9 @@ type CLEANUP_GUIDE.md
 - [Baseline 文档](baseline/README.md) - Baseline Agent 说明
 - [数据库结构](db/SCHEMA.md) - 数据库表结构
 - [评估功能说明](评估功能使用说明.md) - Gradio 评估功能详解
-- [清理指南](CLEANUP_GUIDE.md) - 项目文件清理指南
 - [方案设计](方案设计.md) - 技术方案设计文档
 - [问题分析](NL2SQL问题分析.md) - NL2SQL 问题分析报告
+- [NL2SQL 测试报告](newtest/nl2sql/nl2sql_test_report.md) - 新测试框架测试结果
 
 ## 📊 分析工具
 
@@ -365,6 +411,13 @@ python analyze_nl2sql_failures_by_time.py
 
 # 未测试问题分析
 python analyze_untested_questions.py
+
+# 测试结果分析
+python analyze_test_results.py
+
+# 新测试框架错误分析
+cd newtest/nl2sql
+python analyze_errors.py
 ```
 
 ## 📄 许可证

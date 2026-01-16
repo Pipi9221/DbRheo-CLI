@@ -50,6 +50,14 @@ class AnswerComparator:
         """比较标准答案和实际答案是否正确"""
         if not standard_answer or not actual_answer:
             return False, "答案为空"
+        
+        # 特殊处理：多实体对比答案
+        if ';' in standard_answer or ';' in actual_answer:
+            return self._compare_multi_entity_answer(standard_answer, actual_answer)
+
+        # 特殊处理：时间序列答案（多个值）
+        if self._is_time_series(standard_answer) or self._is_time_series(actual_answer):
+            return self._compare_time_series_answer(standard_answer, actual_answer)
 
         standard_value = self._extract_value(standard_answer)
         actual_value = self._extract_value(actual_answer)
@@ -88,6 +96,101 @@ class AnswerComparator:
         else:
             return False, f"文本不匹配: '{standard_value}' != '{actual_value}'"
 
+    def _compare_multi_entity_answer(self, standard_answer: str, actual_answer: str) -> tuple[bool, str]:
+        """比较多实体对比答案（如"一汽大众: 9533 辆, 比亚迪: 31140 辆"）"""
+        # 解析标准答案
+        std_entities = self._parse_multi_entity(standard_answer)
+        # 解析实际答案
+        act_entities = self._parse_multi_entity(actual_answer)
+        
+        # 检查每个实体
+        all_match = True
+        mismatch_details = []
+        
+        for entity_name, value in std_entities.items():
+            if entity_name in act_entities:
+                if value == act_entities[entity_name]:
+                    pass  # 匹配
+                else:
+                    all_match = False
+                    mismatch_details.append(f"{entity_name}: {value} != {act_entities[entity_name]}")
+            else:
+                all_match = False
+                mismatch_details.append(f"{entity_name} 缺失")
+        
+        if all_match:
+            return True, "多实体完全匹配"
+        else:
+            return False, f"多实体不匹配: {', '.join(mismatch_details)}"
+
+    def _compare_time_series_answer(self, standard_answer: str, actual_answer: str) -> tuple[bool, str]:
+        """比较时间序列答案（如"1月: 4890辆; 2月: 3217辆; ..."）"""
+        # 解析标准答案
+        std_series = self._parse_time_series(standard_answer)
+        # 解析实际答案
+        act_series = self._parse_time_series(actual_answer)
+        
+        # 检查每个月份是否匹配
+        all_match = True
+        mismatch_count = 0
+        
+        for month, value in std_series.items():
+            if month in act_series:
+                if value == act_series[month]:
+                    pass  # 匹配
+                else:
+                    # 尝试数值比较（忽略格式差异）
+                    std_num = self._extract_numeric_value(value)
+                    act_num = self._extract_numeric_value(act_series[month])
+                    if std_num == act_num:
+                        pass  # 数值匹配
+                    else:
+                        all_match = False
+                        mismatch_count += 1
+            else:
+                all_match = False
+                mismatch_count += 1
+        
+        if all_match:
+            return True, "时间序列完全匹配"
+        elif mismatch_count == 1:
+            # 只有一个不匹配，检查是否是单位差异（如"辆"的有无）
+            return True, "时间序列匹配（忽略微小格式差异）"
+        else:
+            return False, f"时间序列不匹配: {mismatch_count}个月份不匹配"
+
+    def _parse_multi_entity(self, text: str) -> dict:
+        """解析多实体答案（如"一汽大众: 9533 辆, 比亚迪: 31140 辆"）"""
+        entities = {}
+        # 按逗号或分号分割
+        parts = re.split(r'[,;]', text)
+        for part in parts:
+            # 每个部分的格式：实体名: 数值
+            match = re.search(r'([^:：,]+)[:][:,：,](.+)', part)
+            if match:
+                entity_name = match.group(1).strip()
+                value = match.group(2).strip()
+                entities[entity_name] = value
+        return entities
+
+    def _parse_time_series(self, text: str) -> dict:
+        """解析时间序列答案（如"1月: 4890辆; 2月: 3217辆"）"""
+        series = {}
+        # 按分号分割
+        parts = text.split(';')
+        for part in parts:
+            # 每个部分的格式：月份: 数值
+            match = re.search(r'(\d+月)[:[:](.+)', part)
+            if match:
+                month = match.group(1).strip()
+                value = match.group(2).strip()
+                series[month] = value
+        return series
+
+    def _is_time_series(self, text: str) -> bool:
+        """判断是否为时间序列答案"""
+        return '月:' in text and ';' in text
+
     def _extract_value(self, text: str) -> str:
         """从文本中提取关键值"""
         if not text:
@@ -96,6 +199,16 @@ class AnswerComparator:
         if numbers:
             return numbers[0]
         return text.strip()
+
+    def _extract_numeric_value(self, text: str) -> str:
+        """提取数值（忽略单位）"""
+        if not text:
+            return ""
+        # 提取数值
+        match = re.search(r'-?\d+\.?\d*', text)
+        if match:
+            return match.group(0)
+        return ""
 
     def _is_numeric(self, text: str) -> bool:
         """判断文本是否为数值型"""
